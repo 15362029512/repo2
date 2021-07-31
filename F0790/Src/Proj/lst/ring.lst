@@ -1,0 +1,549 @@
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE RING
+OBJECT MODULE PLACED IN .\output\ring.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE ..\User\Src\ring.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE INCDIR(..\Core;..
+                    -\Lib\Inc;..\User\Inc;..\App\Inc) DEBUG PRINT(.\lst\ring.lst) OBJECT(.\output\ring.obj)
+
+line level    source
+
+   1          /* Includes ------------------------------------------------------------------*/
+   2          #include "ring.h"
+   3          #include "uart.h"
+   4          
+   5          /* Private typedef -----------------------------------------------------------*/
+   6          /* Private define ------------------------------------------------------------*/ 
+   7          
+   8          
+   9          #define VOL_MAX_LEVEL 15 //(¾²Òô¡ª¡ª(F0~FF)×î´óÉùÒôÒ»¹²ÓÐ17¸ö)
+  10          
+  11          
+  12          /* Private macro -------------------------------------------------------------*/
+  13          /* Private variables ---------------------------------------------------------*/
+  14          static uint16_t current_ring_vol_AD_value = 0;     //µ±Ç°ÉùÒôÐýÅ¥µÄÖµ
+  15          static uint16_t before_ring_vol_AD_value = 0;     //ÉÏ´ÎÉùÒôÐýÅ¥µÄÖµ
+  16          static uint16_t max_ring_vol_AD_value = 3269;     //×î´óÉùÒôµÄADÖµ  
+  17          
+  18          
+  19          uint8_t spk_cmd_ing = 0;          //ÕýÔÚ·¢ËÍÃüÁî
+  20          static uint8_t spk_cmd_step = 0;         //·¢ËÍÃüÁîµÄ²½Öè
+  21          static uint8_t spk_time_cnt = 0;         
+  22          static uint8_t cmd_bit_cnt = 0;
+  23          
+  24          
+  25          //²»Í¬µÄÒôÁ¿µÈ¼¶£¬½«450»®·ÖÎª15¶Î£¬Ã¿Ò»¶ÎÕ¾²»Í¬µÄ±ÈÖØ:90,90,40,40,35,35,35,25,20,5,5,5,5,5,15
+  26          static uint16_t vol_level_percent_array[VOL_MAX_LEVEL] = {90,180,220,260,295,330,365,390,410,415,420,425,4
+             -30,435,450};
+  27          
+  28          
+  29          
+  30          /* global variables ----------------------------------------------------------*/
+  31          uint8_t g_cmd = cmd_ring_stop;                          //Í¨ÐÅÊ±Òª·¢ËÍµÄÃüÁî            
+  32          uint8_t need_replay = 0;
+  33          uint8_t g_alarm_ring_index      = 0x02;                 //ÄÖÖÓÑ¡ÔñµÄÁåÉù        
+  34          
+  35          uint8_t g_current_ring_vol_level = 0XF0;     //µ±Ç°ÉùÒôµÄµÈ¼¶  
+  36          
+  37          uint8_t alarm_ring_cycle = 2;                                                           //Ò»¸öÑ­»·Àï µÎ µÄ´ÎÊý
+  38          
+  39          
+  40          uint8_t ring_gap_time = 0;
+  41          
+  42          
+  43          
+  44          /* Private functions ---------------------------------------------------------*/
+  45          static uint8_t get_current_vol_level(void);
+  46          static void ring_vol_printf(void);
+  47          static void ring_vol_ad_init(void);
+  48          
+  49          
+  50          
+  51          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+  52          /***@º¯ÊýÃû³Æ£º   ring_vol_ad_init
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 2   
+
+  53              @º¯Êý¹¦ÄÜ£º   ³õÊ¼»¯ÒôÁ¿¼ì²âÒý½ÅÎªADCH3
+  54              @Èë¿Ú²ÎÊý£º   ÎÞ
+  55              @³ö¿Ú²ÎÊý£º   ÎÞ
+  56              @±¸×¢ËµÃ÷£º   ÎÞ
+  57          */
+  58          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+  59          static void ring_vol_ad_init(void)
+  60          {
+  61   1          GPIO_Init(RING_VOL_CTL_PIN, RING_VOL_CTL_MOD);      //ch3,ÓïÒôµ÷½Ú¼ì²â
+  62   1              ADCON = 0x3d;
+  63   1          //ADCFGL |= 0X60;                           //ADCÊ±ÖÓ6·ÖÆµ 
+  64   1          ADCFGL |= 0xc0;     
+  65   1      }
+  66          
+  67          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+  68          /***@º¯ÊýÃû³Æ£º   ring_init
+  69              @º¯Êý¹¦ÄÜ£º   ³õÊ¼»¯ÓïÒôÏà¹ØÒý½Å£¬ÓïÒôICºÍÒôÁ¿¼ì²â£¬²¢¸ø³õÊ¼»¯ÒôÁ¿
+  70              @Èë¿Ú²ÎÊý£º   ÎÞ
+  71              @³ö¿Ú²ÎÊý£º   ÎÞ
+  72              @±¸×¢ËµÃ÷£º   ÎÞ
+  73          */
+  74          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+  75          
+  76          void ring_init(void)
+  77          {
+  78   1              GPIO_Init(BUSY_PIN,INPUT);
+  79   1              GPIO_Init(SCL_PIN,OUTPUT);
+  80   1              GPIO_Init(SDA_PIN,OUTPUT);
+  81   1          GPIO_Init(DAC_R_PIN,OUTPUT);
+  82   1          GPIO_Init(V_AMP_CTL_PIN,OUTPUT);
+  83   1      
+  84   1          /*
+  85   1              SCL_LOW;
+  86   1          SDA_LOW;
+  87   1          */
+  88   1      
+  89   1              SCL_HIGH;
+  90   1          SDA_HIGH;
+  91   1      
+  92   1          DAC_R_LOW;
+  93   1          V_AMP_CTL_PIN_LOW;
+  94   1         
+  95   1      
+  96   1          ring_vol_ad_init();
+  97   1          current_ring_vol_AD_value = get_adjust_AD_value(RING_VOL_CTL_ADCCH);
+  98   1              if (current_ring_vol_AD_value > max_ring_vol_AD_value)
+  99   1              {
+ 100   2                      max_ring_vol_AD_value = current_ring_vol_AD_value;
+ 101   2              }
+ 102   1          before_ring_vol_AD_value = current_ring_vol_AD_value;
+ 103   1              
+ 104   1          g_current_ring_vol_level = get_current_vol_level();    //»ñÈ¡³õÊ¼ÉùÒôµÈ¼¶
+ 105   1              //g_current_ring_vol_level = 0xF0;
+ 106   1      }
+ 107          
+ 108          
+ 109          void ring_close(void)
+ 110          {
+ 111   1          
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 3   
+
+ 112   1          GPIO_Init(BUSY_PIN,HIGH_Z);
+ 113   1          SCL_LOW;
+ 114   1              SDA_LOW;
+ 115   1          GPIO_Init(DAC_R_PIN,HIGH_Z);
+ 116   1          GPIO_Init(RING_VOL_CTL_PIN, HIGH_Z);      //ÓïÒôµ÷½Ú¼ì²â¹Ø±Õ
+ 117   1          DAC_R_HIGH;
+ 118   1          V_AMP_CTL_PIN_LOW;
+ 119   1          
+ 120   1      }
+ 121          
+ 122          
+ 123          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 124          /***@º¯ÊýÃû³Æ£º   get_current_vol_level
+ 125              @º¯Êý¹¦ÄÜ£º   »ñÈ¡µ±Ç°ÒôÁ¿µÈ¼¶
+ 126              @Èë¿Ú²ÎÊý£º   ÎÞ
+ 127              @³ö¿Ú²ÎÊý£º   ÎÞ
+ 128              @±¸×¢ËµÃ÷£º   Ò»¹²15¸öµÈ¼¶ ÒôÁ¿0xf0~0xff,0xefÎª¹Ø±ÕÒôÁ¿
+ 129          */
+ 130          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 131          static uint8_t get_current_vol_level(void)
+ 132          {
+ 133   1          float temp_value = 0;
+ 134   1              float temp_level = 0;
+ 135   1              uint16_t _level = 0;
+ 136   1          uint8_t i = 0;
+ 137   1          uint16_t dvalue = 0;
+ 138   1          uint16_t dvalue_min = 450;
+ 139   1          uint8_t dvalue_min_index = 0;
+ 140   1      
+ 141   1              if (current_ring_vol_AD_value != 0)
+ 142   1              {
+ 143   2                      temp_value = (float)max_ring_vol_AD_value/(float)(VOL_MAX_LEVEL * 30); //½«µ±Ç°×î´óÁ¿³Ì·ÖÎª450·Ý
+ 144   2                      temp_value = (uint16_t)(temp_value + 0.5);                   //Çó³öµ±Ç°µÄAD´óÔ¼Õ¼¶àÉÙ·Ý
+ 145   2                      temp_level = (float)current_ring_vol_AD_value/temp_value; 
+ 146   2                      _level = (uint16_t)(temp_level + 0.5);                   //Çó³öµ±Ç°µÄAD´óÔ¼Õ¼¶àÉÙ·Ý
+ 147   2      
+ 148   2              //±éÀúÊý¾Ý£¬Çó³öÓëµ±Ç°·ÝÊý×î½Ó½üµÄ
+ 149   2              for (i = 0; i < 15; i++)
+ 150   2              {
+ 151   3                  dvalue = get_dvalue_u16(_level,vol_level_percent_array[i]);
+ 152   3                  if (dvalue < dvalue_min)
+ 153   3                  {
+ 154   4                      dvalue_min_index = i;
+ 155   4                      dvalue_min = dvalue;
+ 156   4                  }
+ 157   3              }
+ 158   2              dvalue_min_index++;
+ 159   2                      dvalue_min_index += 0xF0;
+ 160   2              }               
+ 161   1          return dvalue_min_index;
+ 162   1      }
+ 163          
+ 164          
+ 165          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 166          /***@º¯ÊýÃû³Æ£º   ring_vol_adjust_handler
+ 167              @º¯Êý¹¦ÄÜ£º   ÒôÁ¿µÈ¼¶µ÷½Ú´¦Àí
+ 168              @Èë¿Ú²ÎÊý£º   ÎÞ
+ 169              @³ö¿Ú²ÎÊý£º   ÎÞ
+ 170              @±¸×¢ËµÃ÷£º   Ö÷º¯Êý20msµ÷ÓÃÒ»´Î
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 4   
+
+ 171          */
+ 172          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 173          void ring_vol_adjust_handler(void)
+ 174          {
+ 175   1          
+ 176   1          uint16_t ring_vol_AD_differ_value = 0;       //Ç°Ò»´ÎÓëÉÏÒ»´ÎADÖµµÄ²îÖµ
+ 177   1      
+ 178   1          #if (AD_FILTER == 0)
+                      current_ring_vol_AD_value = GetChannelAdcValue(RING_VOL_CTL_ADCCH);  //Ö±½Ó»ñÈ¡ADÖµ
+                  #elif (AD_FILTER == 1)
+ 181   1              current_ring_vol_AD_value = get_adjust_AD_value(RING_VOL_CTL_ADCCH); //»ñÈ¡ÂË²¨ºóµÄADÖµ
+ 182   1          #endif
+ 183   1      
+ 184   1          if (current_ring_vol_AD_value == 0)
+ 185   1              {
+ 186   2                      g_current_ring_vol_level = 0xF0;   //×îÐ¡ÉùÒô
+ 187   2              }
+ 188   1      
+ 189   1          else 
+ 190   1          {        
+ 191   2              ring_vol_AD_differ_value = get_dvalue_u16(current_ring_vol_AD_value,before_ring_vol_AD_value); //¶
+             -Ô±Èµ±Ç°ÖµºÍÉÏÒ»´ÎµÄÖµÇó³ö²îÖµ
+ 192   2      
+ 193   2              if (ring_vol_AD_differ_value >= 5) //Á½´ÎÏà²î´óÓÚ10£¬ÔòÈÏÎªÊÇÊÖ¶¯µ÷½Ú
+ 194   2              {
+ 195   3                  if (current_ring_vol_AD_value <= max_ring_vol_AD_value)
+ 196   3                      {
+ 197   4                              //do nothing
+ 198   4                      }
+ 199   3                      else
+ 200   3                      {
+ 201   4                              if ((current_ring_vol_AD_value - max_ring_vol_AD_value ) > 20)
+ 202   4                              {
+ 203   5                                       if (current_ring_vol_AD_value != 0xFFF)
+ 204   5                                       {
+ 205   6                                              max_ring_vol_AD_value = current_ring_vol_AD_value;
+ 206   6                                       }                               
+ 207   5                              }
+ 208   4                      }
+ 209   3                      g_current_ring_vol_level = get_current_vol_level();
+ 210   3                      before_ring_vol_AD_value = current_ring_vol_AD_value;
+ 211   3                      //ring_vol_printf();
+ 212   3              }
+ 213   2          }
+ 214   1      }
+ 215          
+ 216          
+ 217          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 218          /***@º¯ÊýÃû³Æ£º   ring_vol_printf
+ 219              @º¯Êý¹¦ÄÜ£º   ´òÓ¡µ±Ç°µÄÒôÁ¿ÐÅÏ¢
+ 220              @Èë¿Ú²ÎÊý£º   ÎÞ
+ 221              @³ö¿Ú²ÎÊý£º   ÎÞ
+ 222              @±¸×¢ËµÃ÷£º   ÎÞ
+ 223          */
+ 224          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 225          void ring_vol_printf(void)
+ 226          {
+ 227   1              #ifdef PRINT_ENABLE
+ 228   1          uart_printf("current_ring_vol_AD_value = %d\n",current_ring_vol_AD_value);
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 5   
+
+ 229   1          uart_printf("g_current_ring_vol_level = %d\n",g_current_ring_vol_level);
+ 230   1              #endif
+ 231   1      }
+ 232          
+ 233          uint8_t addr = 0;
+ 234          
+ 235          
+ 236          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 237          /***@º¯ÊýÃû³Æ£º   send_ring_cmd
+ 238                  @º¯Êý¹¦ÄÜ£º   ·¢ËÍÓïÒôÃüÁî      
+ 239              @Èë¿Ú²ÎÊý£º   ÎÞ
+ 240              @³ö¿Ú²ÎÊý£º   ÎÞ
+ 241              @±¸×¢ËµÃ÷£º   ÎÞ
+ 242          */
+ 243          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 244          void send_ring_cmd(uint8_t CMD)
+ 245          {       
+ 246   1              if (!spk_cmd_ing)
+ 247   1              {
+ 248   2              V_AMP_CTL_PIN_HIGH;    
+ 249   2              SCL_HIGH;
+ 250   2                      g_cmd = CMD;
+ 251   2                      need_replay = 1;
+ 252   2                      cmd_bit_cnt = 0;
+ 253   2                      //SCL_HIGH;                 //À­¸ß Ê±ÖÓÏß 400us
+ 254   2                      spk_time_cnt = 4;
+ 255   2                
+ 256   2                      spk_cmd_ing = 1;
+ 257   2                      spk_cmd_step = 0;
+ 258   2                      
+ 259   2      
+ 260   2              #if (SYSCLK_SRC == IRCH)  //  3686400/12 = 307200
+                              TH1 = 0xe1;
+                              TL1 = 0xe1;     //(0xff - 0xe1) = 30 / 307200 = 1/10000s = 100us
+                      #elif (SYSCLK_SRC == PLL) //  22118400 / 12 = 1843200
+ 264   2                      TH1 = 0x47;
+ 265   2                      TL1 = 0x47;     //(0xff - 0x47) = 184 / 1843200 = 1/10000s = 100us
+ 266   2              #endif
+ 267   2                      TR1 = 1;
+ 268   2                      ET1 = 1;
+ 269   2                      if (g_cmd != cmd_ring_stop)
+ 270   2              {
+ 271   3                  send_ring_cmd_step++;
+ 272   3              }               
+ 273   2              }
+ 274   1      }
+ 275          
+ 276          
+ 277          
+ 278          uint8_t sig_cnt = 0;
+ 279          
+ 280          
+ 281          
+ 282          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 283          /***@º¯ÊýÃû³Æ£º   ring_cmd_isr_handler
+ 284                  @º¯Êý¹¦ÄÜ£º   ÓïÒôÃüÁîÖÐ¶Ï´¦Àí³ÌÐò      
+ 285              @Èë¿Ú²ÎÊý£º   ÎÞ
+ 286              @³ö¿Ú²ÎÊý£º   ÎÞ
+ 287              @±¸×¢ËµÃ÷£º   timer1 100usµ÷ÓÃ
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 6   
+
+ 288          */
+ 289          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+ 290          void ring_cmd_isr_handler(void)
+ 291          {
+ 292   1          if (spk_cmd_ing)
+ 293   1              {
+ 294   2                      if (spk_time_cnt)
+ 295   2                      {
+ 296   3                              spk_time_cnt--;
+ 297   3                      }
+ 298   2                      
+ 299   2                      switch(spk_cmd_step)
+ 300   2                      {
+ 301   3                              case 0:
+ 302   3                              {
+ 303   4                                      if (!spk_time_cnt) //Èç¹ûÊ±ÖÓÏßÀ­¸ßÁË400us
+ 304   4                                      {
+ 305   5                                              spk_cmd_step = 1;         //ÅÐ¶ÏÊý¾ÝÏßÊÇÀ­¸ß»¹ÊÇÀ­µÍ
+ 306   5                                      }
+ 307   4                              }
+ 308   3                              break;
+ 309   3      
+ 310   3                              case 1:
+ 311   3                              {
+ 312   4                      if (!spk_time_cnt)
+ 313   4                      {
+ 314   5                          if(g_cmd & (0x80 >> cmd_bit_cnt))   //ÅÐ¶Ï¸ßÎ»
+ 315   5                                      {
+ 316   6                                              SDA_HIGH;
+ 317   6                                      }
+ 318   5                                      else
+ 319   5                                      {
+ 320   6                                              SDA_LOW;
+ 321   6                                      }
+ 322   5                          SCL_LOW;
+ 323   5                          spk_cmd_step = 2;
+ 324   5                          spk_time_cnt = 4;                    
+ 325   5                      }
+ 326   4      
+ 327   4                              }
+ 328   3                              break;
+ 329   3      
+ 330   3                              case 2:
+ 331   3                              {
+ 332   4                                      if (!spk_time_cnt)
+ 333   4                                      {
+ 334   5                                              cmd_bit_cnt++;
+ 335   5                                              spk_cmd_step = 3; 
+ 336   5                                              spk_time_cnt = 4;
+ 337   5                          SCL_HIGH;
+ 338   5      
+ 339   5                                      }
+ 340   4      
+ 341   4                              }
+ 342   3                              break;
+ 343   3                              
+ 344   3                              case 3:
+ 345   3                              {
+ 346   4                                      if (!spk_time_cnt)
+ 347   4                                      {
+ 348   5                                              if (cmd_bit_cnt > 7)
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 7   
+
+ 349   5                                              {
+ 350   6                                                      cmd_bit_cnt = 0;
+ 351   6                                                      spk_cmd_ing = 0;
+ 352   6                                                      spk_cmd_step = 0;
+ 353   6      
+ 354   6                              
+ 355   6                              if (g_cmd == cmd_ring_stop)
+ 356   6                              {
+ 357   7                                  V_AMP_CTL_PIN_LOW;
+ 358   7                                  //SCL_LOW;
+ 359   7                                  
+ 360   7                              }/*
+ 361   6                              if (g_cmd != cmd_ring_stop)
+ 362   6                              {
+ 363   6                                  send_ring_cmd_step++;
+ 364   6                              }
+ 365   6                              if ((send_ring_cmd_step >= 2)||(g_cmd == cmd_ring_stop))
+ 366   6                              {
+ 367   6                                  send_ring_cmd_step = 0;
+ 368   6                              }
+ 369   6                              */
+ 370   6                                              }
+ 371   5                                              else
+ 372   5                                              {
+ 373   6                                                      spk_cmd_step = 1;
+ 374   6                                              }
+ 375   5                                      }
+ 376   4                              }     
+ 377   3                              break;            
+ 378   3                  default:break;
+ 379   3                      }       
+ 380   2              }
+ 381   1      }
+ 382          
+ 383          
+ 384          
+ 385          
+ 386          
+ 387          
+ 388          void turn_on_tone(void)
+ 389          {
+ 390   1      
+ 391   1      }
+ 392          
+ 393          
+ 394          
+ 395          void send_byte(uint8_t addr)
+ 396          {
+ 397   1          uint8_t i;
+ 398   1          SCL_HIGH;
+ 399   1          Delay_50us(8);
+ 400   1          for(i=0;i<8;i++)
+ 401   1          {
+ 402   2              if(addr&0x80)
+ 403   2              {
+ 404   3                  SDA_HIGH;
+ 405   3              }
+ 406   2              
+ 407   2              else
+ 408   2              {
+ 409   3                   SDA_LOW;
+ 410   3              }     
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 8   
+
+ 411   2              SCL_LOW;
+ 412   2              Delay_50us(8);
+ 413   2              SCL_HIGH;
+ 414   2              Delay_50us(8);
+ 415   2              addr<<=1;
+ 416   2          } 
+ 417   1      }
+ 418          
+ 419          
+ 420          
+ 421          
+ 422          
+ 423          
+ 424          
+ 425          
+ 426          
+ 427          
+ 428          
+ 429          
+ 430          
+ 431          
+ 432          
+ 433          
+ 434          
+ 435          uint8_t send_once_flg = 0;
+ 436          uint8_t send_ring_cmd_step = 0;  // step = 0,·¢ËÍÒôÁ¿  step = 1 ·¢ËÍÓïÒôÃüÁî  step = 2£¬ÑÓÊ±
+ 437          
+ 438          
+ 439          
+ 440          
+ 441          void alarm_tone(void)
+ 442          {
+ 443   1          if (!busy)
+ 444   1          {
+ 445   2              if (!ring_gap_time)
+ 446   2              {
+ 447   3                              if (send_ring_cmd_step == 0)
+ 448   3                              {
+ 449   4                                      send_ring_cmd(g_current_ring_vol_level);
+ 450   4                              }
+ 451   3                  if (send_ring_cmd_step == 1)
+ 452   3                              {
+ 453   4                                       send_ring_cmd(g_alarm_ring_index);
+ 454   4                              }
+ 455   3                              if (send_ring_cmd_step >= 2)
+ 456   3                              {
+ 457   4                                      ring_gap_time = 200;
+ 458   4                                 send_ring_cmd_step = 0;
+ 459   4                              }
+ 460   3              }
+ 461   2      
+ 462   2          }
+ 463   1      }
+ 464          
+ 465          
+ 466          uint8_t ring_stop_flg = 0;
+ 467          
+ 468          void ring_stop(void)
+ 469          {
+ 470   1         
+ 471   1          if (g_cmd != cmd_ring_stop)
+ 472   1          {
+C51 COMPILER V9.60.0.0   RING                                                              04/10/2021 13:15:01 PAGE 9   
+
+ 473   2                      #if 0
+                              SCL_HIGH;                 //À­¸ß Ê±ÖÓÏß 400us
+                              SDA_HIGH;
+                              #endif
+ 477   2                      
+ 478   2                      
+ 479   2                      
+ 480   2              if (!busy)
+ 481   2              {       
+ 482   3                      send_ring_cmd(cmd_ring_stop);
+ 483   3                  ring_gap_time = 0;
+ 484   3                      ring_stop_flg = 0;
+ 485   3              }
+ 486   2                      
+ 487   2          }
+ 488   1      }
+ 489          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1060    ----
+   CONSTANT SIZE    =     63    ----
+   XDATA SIZE       =     51      20
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

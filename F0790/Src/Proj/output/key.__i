@@ -1,0 +1,1 @@
+"..\User\Src\key.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\Core;..\Lib\Inc;..\User\Inc;..\App\Inc) DEBUG PRINT(.\lst\key.lst) OBJECT(.\output\key.obj)

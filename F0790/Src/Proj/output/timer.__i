@@ -1,0 +1,1 @@
+"..\User\Src\timer.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\Core;..\Lib\Inc;..\User\Inc;..\App\Inc) DEBUG PRINT(.\lst\timer.lst) OBJECT(.\output\timer.obj)

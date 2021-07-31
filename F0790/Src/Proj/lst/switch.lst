@@ -1,0 +1,205 @@
+C51 COMPILER V9.60.0.0   SWITCH                                                            04/10/2021 13:15:06 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE SWITCH
+OBJECT MODULE PLACED IN .\output\switch.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE ..\User\Src\switch.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE INCDIR(..\Core;
+                    -..\Lib\Inc;..\User\Inc;..\App\Inc) DEBUG PRINT(.\lst\switch.lst) OBJECT(.\output\switch.obj)
+
+line level    source
+
+   1          #include "switch.h"
+   2          
+   3          
+   4          uint8_t g_current_motor_level = 0;
+   5          uint8_t g_current_alarm_mode_level = 0;
+   6          
+   7          
+   8          uint8_t g_before_motor_level = 0;
+   9          uint8_t g_before_alarm_mode_level = 0;
+  10          
+  11          
+  12          uint8_t g_volume_and_mode_init_flg = 0;  //震动大小和闹铃模式初始化标志
+  13          
+  14          
+  15          
+  16          u8 m_switch[2] = {0};   
+  17          
+  18          
+  19          
+  20          uint16_t switch_level_buf[][SWITCH_LEVEL_CNT] = 
+  21          {
+  22              {SWITCH_H,SWITCH_L,SWITCH_M},
+  23              {SWITCH_H,SWITCH_L,SWITCH_M}
+  24          };
+  25          
+  26          uint8_t switch_ADC_ch_table[] = {MOTOR_ADC_CH,MODE_ADC_CH};
+  27          
+  28          
+  29          uint8_t g_led_alarm_enable = 0;
+  30          
+  31          
+  32          //code int switch_level_buf[SWITCH_LEVEL_CNT] = {SWITCH_H,SWITCH_L,SWITCH_M};
+  33          
+  34          //code u8 switch_adc_ch[] = {MOTOR_ADC_CH,MODE_ADC_CH};
+  35          
+  36          
+  37          
+  38          void switch_ADC_init(void)
+  39          {
+  40   1          GPIO_Init(MOTOR_SWITCH_ADC_PIN,                     MOTOR_SWITCH_PIN_ADC_MODE);
+  41   1          GPIO_Init(MODE_SWITCH_ADC_PIN,                              MODE_SWITCH_PIN_ADC_MODE);
+  42   1          ADCON = 0x3d;
+  43   1          ADCFGL |= 0xc0;     
+  44   1      }
+  45          
+  46          void switch_led_mod_init(void)
+  47          {
+  48   1          GPIO_Init(LED_SW_MOD_PIN, INPUT);
+  49   1      }
+  50          
+  51          
+  52          void led_mod_detect(void)
+  53          {
+  54   1          if (LED_SW_MOD_GPIO)
+C51 COMPILER V9.60.0.0   SWITCH                                                            04/10/2021 13:15:06 PAGE 2   
+
+  55   1          {
+  56   2              g_led_alarm_enable = 1;
+  57   2          }
+  58   1          else
+  59   1          {
+  60   2              g_led_alarm_enable = 0;
+  61   2          }
+  62   1      }
+  63          
+  64          
+  65          void close_switch_ADC_pin(void)
+  66          {
+  67   1          GPIO_Init(MOTOR_SWITCH_ADC_PIN,                     OUTPUT);
+  68   1          GPIO_Init(MODE_SWITCH_ADC_PIN,                      OUTPUT);
+  69   1      
+  70   1          MOTOR_SWITCH_ADC_GPIO = 0;
+  71   1          MODE_SWITCH_ADC_GPIO = 0;
+  72   1          
+  73   1      }
+  74          
+  75          
+  76          
+  77          uint8_t get_current_switch_level(uint8_t _adc_chx_index)
+  78          {
+  79   1          uint8_t i = 0;
+  80   1          uint16_t adc_value = 0;
+  81   1          adc_value = GetChannelAdcValue(switch_ADC_ch_table[_adc_chx_index]);
+  82   1          for (i = 0; i < SWITCH_LEVEL_CNT; i++)
+  83   1          {
+  84   2             if (adc_value < switch_level_buf[_adc_chx_index][i])
+  85   2             {
+  86   3                  if (i == 0)
+  87   3                  {
+  88   4                      i = 2;
+  89   4                  }
+  90   3                  else if (i == 1)
+  91   3                  {
+  92   4                      i = 0;
+  93   4                  }
+  94   3                  else if (i == 2)
+  95   3                  {
+  96   4                      i = 1;
+  97   4                  }
+  98   3                  return i;
+  99   3             }
+ 100   2          }
+ 101   1              return 0xff;
+ 102   1      }
+ 103          
+ 104          
+ 105          
+ 106          
+ 107          
+ 108          
+ 109          void get_volume_and_mode(void)
+ 110          {
+ 111   1          if (!flag_alarm_timeout)   //正在播放闹钟时不处理，调节后下次生效
+ 112   1          {
+ 113   2              g_current_motor_level = get_current_switch_level(MOTOR_ADC_INDEX);
+ 114   2              g_current_alarm_mode_level = get_current_switch_level(MODE_ADC_INDEX);
+ 115   2      
+ 116   2              if ((g_current_motor_level != g_before_motor_level) ||  \
+C51 COMPILER V9.60.0.0   SWITCH                                                            04/10/2021 13:15:06 PAGE 3   
+
+ 117   2                  (g_current_alarm_mode_level != g_before_alarm_mode_level) || \
+ 118   2                  (!g_volume_and_mode_init_flg))
+ 119   2              {
+ 120   3                  switch (g_current_motor_level)
+ 121   3                  {
+ 122   4                      case SWITCH_H_INDEX:
+ 123   4                          alarm_shake_seted_strength = STRENGTH_H;
+ 124   4                          break;
+ 125   4                          
+ 126   4                      case SWITCH_L_INDEX:
+ 127   4                          alarm_shake_seted_strength = STRENGTH_L;    
+ 128   4                          break;
+ 129   4                          
+ 130   4                      case SWITCH_M_INDEX:
+ 131   4                          alarm_shake_seted_strength = STRENGTH_M;
+ 132   4                          break;
+ 133   4                          
+ 134   4                      default:break;
+ 135   4                  }
+ 136   3      
+ 137   3                  switch (g_current_alarm_mode_level)
+ 138   3                  {
+ 139   4                      case SWITCH_MODE_1:
+ 140   4                          flag_alarm_style_ring = 1;
+ 141   4                          flag_alarm_style_shake = 0;
+ 142   4                          break;
+ 143   4                          
+ 144   4                      case SWITCH_MODE_2:
+ 145   4                          flag_alarm_style_ring = 1;
+ 146   4                          flag_alarm_style_shake = 1;
+ 147   4                          break;
+ 148   4                          
+ 149   4                      case SWITCH_MODE_3:
+ 150   4                          flag_alarm_style_ring = 0;
+ 151   4                          flag_alarm_style_shake = 1;
+ 152   4                          break;
+ 153   4                      default:break;
+ 154   4                  }
+ 155   3      
+ 156   3      
+ 157   3                  if (!g_volume_and_mode_init_flg)
+ 158   3                  {
+ 159   4                      g_volume_and_mode_init_flg = 1;
+ 160   4                  }
+ 161   3                  if (g_current_motor_level != g_before_motor_level)
+ 162   3                  {
+ 163   4                      g_before_motor_level = g_current_motor_level;
+ 164   4                  }
+ 165   3                  if (g_current_alarm_mode_level != g_before_alarm_mode_level)
+ 166   3                  {
+ 167   4                      g_before_alarm_mode_level = g_current_alarm_mode_level;
+ 168   4                  }
+ 169   3              }
+ 170   2          }
+ 171   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    369    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     22       2
+   PDATA SIZE       =   ----    ----
+C51 COMPILER V9.60.0.0   SWITCH                                                            04/10/2021 13:15:06 PAGE 4   
+
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

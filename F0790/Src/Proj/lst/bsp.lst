@@ -1,0 +1,105 @@
+C51 COMPILER V9.60.0.0   BSP                                                               04/10/2021 13:15:01 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE BSP
+OBJECT MODULE PLACED IN .\output\bsp.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE ..\User\Src\bsp.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE INCDIR(..\Core;..\
+                    -Lib\Inc;..\User\Inc;..\App\Inc) DEBUG PRINT(.\lst\bsp.lst) OBJECT(.\output\bsp.obj)
+
+line level    source
+
+   1          /* Includes ------------------------------------------------------------------*/
+   2          #include "bsp.h"
+   3          #include "uart.h"
+   4          /* Private typedef -----------------------------------------------------------*/
+   5          /* Private define ------------------------------------------------------------*/ 
+   6          /* Private macro -------------------------------------------------------------*/
+   7          /* Private variables ---------------------------------------------------------*/
+   8          /* Private function prototypes -----------------------------------------------*/
+   9          /* Private functions ---------------------------------------------------------*/
+  10          static void adc_user_init(void);
+  11          
+  12          /* global variables ----------------------------------------------------------*/
+  13          
+  14          
+  15          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+  16          /***@函数名称：   adc_user_init
+  17              @函数功能：   初始化ADC参数
+  18              @入口参数：   无
+  19              @出口参数：   无
+  20              @备注说明：   背光，音量，按键，参考电压为VDD,6分频
+  21          */
+  22          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+  23          static void adc_user_init(void)
+  24          {  
+  25   1          ADCON = 0x3d;
+  26   1          //ADCFGL |= 0X60;                           //ADC时钟6分频 
+  27   1          ADCFGL |= 0xc0;     
+  28   1      }
+  29          
+  30          
+  31          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+  32          /***@函数名称：   bsp_init
+  33              @函数功能：   板级硬件初始化
+  34              @入口参数：   无
+  35              @出口参数：   无
+  36              @备注说明：   主程序调用
+  37          */
+  38          /*--------------------------------------------------------------------------------------------------------
+             -----------------------------------*/
+  39          void bsp_init(void)
+  40          {
+  41   1      
+  42   1      }
+  43          
+  44          
+  45          
+  46          
+  47          
+  48          void no_use_io_init(void)
+  49          {
+  50   1              GPIO_Init(P36F,HIGH_Z);
+C51 COMPILER V9.60.0.0   BSP                                                               04/10/2021 13:15:01 PAGE 2   
+
+  51   1              GPIO_Init(P70F,HIGH_Z);
+  52   1              GPIO_Init(P73F,HIGH_Z);
+  53   1              GPIO_Init(P74F,HIGH_Z);
+  54   1              //GPIO_Init(P75F,HIGH_Z);
+  55   1      }
+  56          
+  57          
+  58          
+  59          
+  60          
+  61          
+  62          
+  63          
+  64          
+  65          
+  66          
+  67          
+  68          
+  69          
+  70          
+  71          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     26    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
