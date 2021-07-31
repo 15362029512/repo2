@@ -8,6 +8,9 @@
 #include "system_clock.h"
 #include "key_app.h"
 
+
 void test2(void);
+void test(void);
+
 
 #endif
