@@ -11,6 +11,6 @@
 
 void test2(void);
 void test(void);
-
+void dev1_test(void);
 
 #endif
