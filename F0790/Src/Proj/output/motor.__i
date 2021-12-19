@@ -1,1 +1,0 @@
-"..\User\Src\motor.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\Core;..\Lib\Inc;..\User\Inc;..\App\Inc) DEBUG PRINT(.\lst\motor.lst) OBJECT(.\output\motor.obj)
